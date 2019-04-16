@@ -19,6 +19,20 @@ var budgetController = (function() {
         this.value = value;
     } // end constructor
     
+    // create function to calculate income and expenses
+    var calculateTotal = function(type) {
+        // set a variable to store the sum of either incomes or expenses
+        var sum = 0;
+        
+        // loop over the exp or inc array and add contents to get the some. forEach accepts a callback function
+        data.allItems[type].forEach(function(cur) {
+            sum += cur.value; // this will get the value of the object that is stored in the all items object inside either the exp or inc array based on the current position in the forEach
+        });
+        
+        data.totals[type] = sum; // store the total in the data object in the totals portion
+        
+    } // end function
+    
     // create an object to store all income/expense data, rather than creating a bunch of variables
     var data = {
         // rather than just having a bunch of key value pairs in an object, create inner objects to organize the data seperately
@@ -29,7 +43,9 @@ var budgetController = (function() {
         totals: {
             exp: 0,
             inc: 0
-        } // end totals
+        }, // end totals
+        budget: 0,
+        percentage: -1 // -1 is a value that is used to say something does not exist
     } // end object
     
     // return an object that contains all of the public methods
@@ -61,6 +77,36 @@ var budgetController = (function() {
             
         }, // end function
         
+        // create a function to calculate the budget
+        calulateBudget: function() {
+            
+            // calculate total income and expenses
+            calculateTotal('inc');
+            calculateTotal('exp');
+            
+            // calculate the budget: income - expenses
+            data.budget = data.totals.inc - data.totals.exp;
+            
+            // calculate the percentage of income that was spent, make sure income is greater than 0 before calculating and displaying the percentage
+            if (data.totals.inc > 0) {
+                data.percentage = Math.round((data.totals.exp / data.totals.inc) * 100); // multiply by one hundred to go from decimal to percentage, round the result to not get a long decimal
+            } else {
+                data.percentage = -1
+            } // end if
+            
+        }, // end function
+        
+        getBudget: function() {
+            
+            return {
+                budget: data.budget,
+                totalInc: data.totals.inc,
+                totalExp: data.totals.exp,
+                percentage: data.percentage
+            }; // end return
+            
+        }, // end function
+        
         testing: function() {
             console.log(data);
         }
@@ -81,7 +127,11 @@ var UIController = (function() {
         inputValue: '.add__value',
         inputBtn: '.add__btn',
         incomeContainer: '.income__list',
-        expensesContainer: '.expenses__list'
+        expensesContainer: '.expenses__list',
+        budgetLabel: '.budget__value',
+        incomeLabel: '.budget__income--value',
+        expensesLabel: '.budget__expenses--value',
+        percentageLabel: '.budget__expenses--percentage'
     }
     
     // this method needs to be accessible from the outside, so you have to return it as an object so it can be accessed
@@ -91,7 +141,7 @@ var UIController = (function() {
             return {
                 type: document.querySelector(DOMstrings.inputType).value, // value can be inc for income or exp for expenses
                 description: document.querySelector(DOMstrings.inputDescription).value,
-                value: document.querySelector(DOMstrings.inputValue).value
+                value: parseFloat(document.querySelector(DOMstrings.inputValue).value) // parseFloat converts a string to a floating number, so it can have decimals
             };
         },
         
@@ -116,6 +166,41 @@ var UIController = (function() {
             document.querySelector(element).insertAdjacentHTML('beforeend', newHtml);
             
         },
+        
+        // create a way to remove the values entered into the fields by the user in prep for the next input
+        clearFields: function() {
+            var fields, fieldsArr;
+            
+            // you need the comma because normall you would be selecting it according to HTML style text, but you have the html style stored in the DOMstrings object
+            fields = document.querySelectorAll(DOMstrings.inputDescription + ', ' + DOMstrings.inputValue);
+            
+            // Array is the function constructor. Slice() is stored in the Array object's prototype. because slice is a function you can use call and put in the fields list to trick it into converting the list into an array. we need it to be an array so we can loop through it
+            fieldsArr = Array.prototype.slice.call(fields);
+            
+            // use forEach to loop through the fieldsArr. place an anonymous callback function that can have up to three parameters
+            fieldsArr.forEach(function(current, index, array) {
+                current.value = '';
+            });
+            
+            // set the focus back to the description input type
+            fieldsArr[0].focus();
+        }, // end function
+        
+        // create function to display the budget in the UI
+        displayBudget: function(obj) {
+          
+            document.querySelector(DOMstrings.budgetLabel).textContent = obj.budget;
+            document.querySelector(DOMstrings.incomeLabel).textContent = obj.totalInc;
+            document.querySelector(DOMstrings.expensesLabel).textContent = obj.totalExp;
+            
+            // only display the percentage if it greater than 0
+            if (obj.percentage > 0) {
+                document.querySelector(DOMstrings.percentageLabel).textContent = obj.percentage + '%';
+            } else {
+                document.querySelector(DOMstrings.percentageLabel).textContent = '---';
+            } // end if
+            
+        }, // end function
         
         // rather than setting up multiple objects for the classes in other modules, we are going to expose the DOMstrings object to the public so it can be accessed by other modules and added to/utilized
         getDOMstrings: function() {
@@ -155,21 +240,42 @@ var controller = (function(budgetCtrl, UICtrl) {
         
     } // end function
     
+    var updateBudget = function() {
+        
+        // 1. Calculate the budget
+        budgetCtrl.calulateBudget();
+        
+        // 2. Return the budget
+        var budget = budgetCtrl.getBudget();
+        
+        // 3. Display the budget on the UI
+        UICtrl.displayBudget(budget);
+        
+    } // end function
+    
     var ctrlAddItem = function() {
         var input, newItem;
         
         // 1. Get the filed input data
         input = UIController.getInput();
         
-        // 2. Add item to budget controller
-        newItem = budgetCtrl.addItem(input.type, input.description, input.value);
+        // check and make sure there is data that can be used before adding it to the UI, prevents empty lines being entered
+        // isNaN checks to see if the input is NaN, so we make sure that it is not NaN, make sure value is greater than 0 because 0 is not an income or an expense
+        if (input.description !== '' && !isNaN(input.value) && input.value > 0) {
+            
+            // 2. Add item to budget controller
+            newItem = budgetCtrl.addItem(input.type, input.description, input.value);
         
-        // 3. Add the new item to the UI
-        UICtrl.addListItem(newItem, input.type);
+            // 3. Add the new item to the UI
+            UICtrl.addListItem(newItem, input.type);
         
-        // 4. Calculate the budget
-        
-        // 5. Display the budget on the UI
+            // 4. Clear the fields
+            UICtrl.clearFields();
+            
+            // 5. Calculate and update budget
+            updateBudget();
+            
+        } // end if
         
     } // end function
     
@@ -177,6 +283,13 @@ var controller = (function(budgetCtrl, UICtrl) {
     return {
         init: function() {
             console.log('App start');
+            // pass an object into the displayBudget function to set everything to 0 upon app start up
+            UICtrl.displayBudget({
+                budget: 0,
+                totalInc: 0,
+                totalExp: 0,
+                percentage: -1
+            });
             setupEventListeners();
         } // end function
     }; // end return
