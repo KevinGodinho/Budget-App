@@ -10,14 +10,32 @@ var budgetController = (function() {
         this.id = id;
         this.description = description;
         this.value = value;
-    } // end constructor
+        this.percentage = -1;
+    }; // end constructor
+    
+    // create a method that calculates the percentage of each input in inc and exp
+    Expense.prototype.calcPercentage = function(totalIncome) {
+        
+        if (totalIncome > 0) {
+            // take the value of the input and divide it by the total income to find the percentage of the individual inc or exp
+            this.percentage = Math.round((this.value / totalIncome) * 100);
+        } else {
+            this.percentage = -1;
+        } // end if
+        
+    }; // end method
+    
+    // create a method to return the percentage
+    Expense.prototype.getPercentage = function() {
+        return this.percentage;
+    }; // end method
     
     // create a constructor for income objects to be created through 
     var Income = function(id, description, value) {
         this.id = id;
         this.description = description;
         this.value = value;
-    } // end constructor
+    }; // end constructor
     
     // create function to calculate income and expenses
     var calculateTotal = function(type) {
@@ -117,6 +135,27 @@ var budgetController = (function() {
             
         }, // end function
         
+        calculatePercentages: function() {
+            
+            // we have access to the current variable, that is what cur is
+            data.allItems.exp.forEach(function(cur) {
+                
+                cur.calcPercentage(data.totals.inc);
+                
+            }); // end forEach 
+            
+        }, // end function
+        
+        getPercentages: function() {
+            // use map to create a new array
+            var allPerc = data.allItems.exp.map(function(cur) {
+                return cur.getPercentage();
+            }); // end map
+            
+            return allPerc;
+            
+        }, // end function
+        
         getBudget: function() {
             
             return {
@@ -153,7 +192,8 @@ var UIController = (function() {
         incomeLabel: '.budget__income--value',
         expensesLabel: '.budget__expenses--value',
         percentageLabel: '.budget__expenses--percentage',
-        container: '.container'
+        container: '.container',
+        expensesPercLabel: '.item__percentage'
     }
     
     // this method needs to be accessible from the outside, so you have to return it as an object so it can be accessed
@@ -232,6 +272,31 @@ var UIController = (function() {
             
         }, // end function
         
+        // create function to display percentages 
+        displayPercentages: function(percentages) {
+            
+            // select the element where the percentages will be displayed in the HTML
+            var fields = document.querySelectorAll(DOMstrings.expensesPercLabel);
+            
+            // create a function for the node list, to loop through the node list using a for loop
+            var nodeListForEach = function(list, callback) {
+                for (var i = 0; i < list.length; i++) {
+                    callback(list[i], i);
+                } // end loop
+            }; // end function
+            
+            nodeListForEach(fields, function(current, index) {
+                
+                if (percentages[index] > 0) {
+                    current.textContent = percentages[index] + '%';
+                } else {
+                    current.textContent = '---';
+                } // end if
+                
+            }); // end forEach
+            
+        }, // end function
+        
         // rather than setting up multiple objects for the classes in other modules, we are going to expose the DOMstrings object to the public so it can be accessed by other modules and added to/utilized
         getDOMstrings: function() {
             return DOMstrings;
@@ -286,6 +351,20 @@ var controller = (function(budgetCtrl, UICtrl) {
         
     } // end function
     
+    // create a function to update the percentages of the inputs
+    var updatePercentages = function() {
+      
+        // 1. Calculate percentages
+        budgetCtrl.calculatePercentages();
+        
+        // 2. Read percentages from budget controller
+        var percentages = budgetCtrl.getPercentages();
+        
+        // 3. Update the UI with new percentages
+        UICtrl.displayPercentages(percentages);
+        
+    }; // end function
+    
     var ctrlAddItem = function() {
         var input, newItem;
         
@@ -307,6 +386,9 @@ var controller = (function(budgetCtrl, UICtrl) {
             
             // 5. Calculate and update budget
             updateBudget();
+            
+            // 6. Calculate and update percentages
+            updatePercentages();
             
         } // end if
         
@@ -336,6 +418,9 @@ var controller = (function(budgetCtrl, UICtrl) {
             
             // 3. update and show new budget
             updateBudget();
+            
+            // 4. Calculate and update percentages
+            updatePercentages();
             
         } // end if
         
